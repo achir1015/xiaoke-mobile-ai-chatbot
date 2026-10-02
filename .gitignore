@@ -1,0 +1,5 @@
+src/com/achir/xiaoke/Config.java
+build/
+*.jks
+local.properties
+backup/
