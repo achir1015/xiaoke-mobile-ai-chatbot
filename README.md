@@ -22,7 +22,7 @@
 ## 網頁 App（iPhone / Android）
 
 ### 安裝
-1. 用手機瀏覽器開啟 GitHub Pages 網址（iPhone 請用 **Safari**）。
+1. 用手機瀏覽器開啟 **https://achir1015.github.io/xiaoke-mobile-ai-chatbot/**（iPhone 請用 **Safari**）。
 2. iPhone：點分享按鈕 →「**加入主畫面**」；Android Chrome：選單 →「**安裝應用程式**」。
 3. 從主畫面打開「小柯」，第一次會要求輸入 **OpenAI API 金鑰**。
 4. 按「點一下開始」並允許麥克風權限。
