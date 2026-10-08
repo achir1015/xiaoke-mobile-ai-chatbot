@@ -62,10 +62,20 @@ final class FaceView extends View {
         c.drawColor(bgColor());
         float t = (System.currentTimeMillis() - start) / 1000f;
 
+        // 依螢幕縮放：臉以 800x300 設計，直向手機時臉佔上半部
+        boolean portrait = h > w;
+        float faceH = h * (portrait ? 0.5f : 0.62f);
+        float k = Math.min(w / 800f, faceH / 300f);
+        float ui = Math.max(1f, Math.min(w, h) / 480f);
+        sub.setTextSize(34f * ui);
+        small.setTextSize(22f * ui);
+
         // ---- 臉 ----
-        float faceH = h * 0.62f;
-        float cx = w / 2f, cy = faceH * 0.5f + 10;
-        float eyeDx = w * 0.17f, eyeW = 92, eyeH = 128;
+        c.save();
+        c.translate((w - 800 * k) / 2f, (faceH - 300 * k) / 2f);
+        c.scale(k, k);
+        float cx = 400, cy = 160;
+        float eyeDx = 136, eyeW = 92, eyeH = 128;
         boolean blink = state != State.SLEEPY && (t % 4.2f) < 0.13f;
         float bob = (float) Math.sin(t * 2.2) * 6;
         if (state == State.SPEAKING) bob = (float) Math.sin(t * 9) * 4;
@@ -80,20 +90,23 @@ final class FaceView extends View {
             c.drawOval(new RectF(cx + eyeDx + 20, cy + 60, cx + eyeDx + 90, cy + 95), cheek);
         }
         drawMouth(c, cx, cy + 95, t);
+        c.restore();
 
         // ---- 狀態列 ----
         String time = new SimpleDateFormat("HH:mm", Locale.TAIWAN).format(new Date());
-        c.drawText(time, 20, 32, small);
+        float barY = small.getTextSize() * 1.45f;
+        c.drawText(time, 20, barY, small);
         String st = stateLabel();
-        c.drawText(st, w - 20 - small.measureText(st), 32, small);
+        c.drawText(st, w - 20 - small.measureText(st), barY, small);
 
         // ---- 字幕 ----
         float top = faceH + 8;
         if (!userText.isEmpty()) {
             String u = "你：" + userText;
-            if (u.length() > 34) u = u.substring(0, 33) + "…";
-            c.drawText(u, 24, top + 22, small);
-            top += 34;
+            int max = (int) ((w - 48) / small.getTextSize());
+            if (u.length() > max) u = u.substring(0, Math.max(1, max - 1)) + "…";
+            c.drawText(u, 24, top + small.getTextSize(), small);
+            top += small.getTextSize() * 1.6f;
         }
         String s = subtitle.isEmpty() ? status : subtitle;
         if (!s.isEmpty()) {

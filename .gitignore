@@ -1,5 +1,8 @@
-src/com/achir/xiaoke/Config.java
-build/
+# Android
+android/src/com/achir/xiaoke/Config.java
+android/build/
+android/local.properties
 *.jks
-local.properties
-backup/
+
+# misc
+.DS_Store

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>小柯 AI 聊天機器人</title>
+<meta name="description" content="小柯：OpenAI 語音聊天機器人網頁 App，iPhone 與 Android 都能用">
+<meta name="theme-color" content="#101522">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="小柯">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  :root {
+    --bg: #101522; --fg: #ffffff; --muted: #9aa4b2; --accent: #7cf29c;
+    --panel: #1b2233; --border: #2c3650; --danger: #ff6f6f;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
+    font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  #face { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--fg); border-radius: 12px;
+    padding: 10px 16px; font-size: 16px; cursor: pointer; }
+  .btn.primary { background: var(--accent); color: #0b1a10; border-color: var(--accent); font-weight: 600; }
+  #tools { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom));
+    display: flex; gap: 8px; z-index: 2; }
+  #tools .btn { padding: 8px 12px; font-size: 18px; opacity: .75; }
+  #typebar { position: fixed; left: 12px; right: 12px; bottom: max(64px, calc(env(safe-area-inset-bottom) + 64px));
+    display: none; gap: 8px; z-index: 3; }
+  #typebar input { flex: 1; min-width: 0; font-size: 16px; padding: 10px 12px; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--fg); }
+  .overlay { position: fixed; inset: 0; background: rgba(8, 11, 20, .92); display: flex; align-items: center;
+    justify-content: center; z-index: 10; padding: 16px; }
+  .card { width: 100%; max-width: 440px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 18px; padding: 22px; }
+  .card h1 { margin: 0 0 6px; font-size: 24px; }
+  .card p { color: var(--muted); line-height: 1.6; margin: 8px 0; font-size: 15px; }
+  .card label { display: block; margin: 14px 0 6px; font-size: 14px; color: var(--muted); }
+  .card input, .card select { width: 100%; font-size: 16px; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+  .row { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; flex-wrap: wrap; }
+  .card label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); }
+  .card label.check input { width: auto; }
+  .hidden { display: none !important; }
+  .err { color: var(--danger); }
+</style>
+</head>
+<body>
+<canvas id="face"></canvas>
+<div id="safeTop" style="position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top)"></div>
+
+<div id="tools">
+  <button class="btn" id="btnType" title="打字輸入" aria-label="打字輸入">⌨️</button>
+  <button class="btn" id="btnSettings" title="設定" aria-label="設定">⚙️</button>
+</div>
+<form id="typebar">
+  <input id="typeInput" placeholder="輸入想問小柯的話…" autocomplete="off" enterkeyhint="send">
+  <button class="btn primary" type="submit">送出</button>
+</form>
+
+<div class="overlay" id="startOverlay">
+  <div class="card">
+    <h1>嗨！我是小柯 👋</h1>
+    <p>點下面的按鈕開始聊天。直接說話我就會聽，也可以點一下螢幕再說話；我說話時點螢幕可以打斷我。</p>
+    <p id="startMsg" class="err"></p>
+    <div class="row"><button class="btn primary" id="btnStart">點一下開始</button></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="settingsOverlay">
+  <form class="card" id="settingsForm">
+    <h1>設定</h1>
+    <p>OpenAI API 金鑰只會存在這支手機的瀏覽器裡，不會上傳到其他地方。</p>
+    <label for="apiKey">OpenAI API 金鑰</label>
+    <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" required>
+    <label for="voice">聲音</label>
+    <select id="voice">
+      <option>nova</option><option>shimmer</option><option>coral</option><option>alloy</option>
+      <option>sage</option><option>fable</option><option>echo</option><option>ash</option><option>onyx</option>
+    </select>
+    <label for="city">預設地區（查天氣用）</label>
+    <input id="city" placeholder="台北">
+    <label class="check"><input type="checkbox" id="vadOn"> 直接說話就開始聽（關閉則只能點螢幕說話）</label>
+    <div class="row">
+      <button class="btn" type="button" id="btnClear">清除對話記憶</button>
+      <button class="btn" type="button" id="btnCancel">取消</button>
+      <button class="btn primary" type="submit">儲存</button>
+    </div>
+  </form>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

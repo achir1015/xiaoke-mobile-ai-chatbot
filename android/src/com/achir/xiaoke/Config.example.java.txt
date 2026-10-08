@@ -27,5 +27,8 @@ public final class Config {
     public static final int MAX_RECORD_SEC = 15;
     public static final int SLEEPY_AFTER_SEC = 90;
 
+    // 開機自動開啟小柯（手機建議 false；專用平板/音箱可設 true）
+    public static final boolean AUTO_START_ON_BOOT = false;
+
     private Config() {}
 }
