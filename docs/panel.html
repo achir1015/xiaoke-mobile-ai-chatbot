@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>小柯快速查詢</title>
+<meta name="theme-color" content="#101522">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #101522; --panel: #1b2233; --hi: #0a3c5a; --border: #2c3650;
+    --fg: #fff; --muted: #9aa4b2; --yellow: #ffd43b; --cyan: #7fd8ff;
+    --blue: #4dabf7; --green: #69db7c; --orange: #ffa94d; --pink: #f783ac; --gray: #868e96; --purple: #b197fc;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg); color: var(--fg); min-height: 100vh;
+    font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  header h1 { flex: 1; margin: 0; font-size: 20px; color: var(--yellow); }
+  button, a.btn, select { font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 14px; cursor: pointer; text-decoration: none; display: inline-block; }
+  button.on { background: var(--hi); border-color: var(--cyan); color: var(--cyan); }
+  .back { background: #3a4252; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .btn.big, .big { min-height: 96px; font-size: 20px; font-weight: 600; border: none; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; gap: 4px; }
+  .big small { font-size: 13px; font-weight: 400; opacity: .8; }
+  .tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .btn.tool, .tool { border-left: 6px solid var(--blue); min-height: 64px; display: flex; flex-direction: column;
+    justify-content: center; gap: 4px; }
+  .tool small { color: var(--muted); font-size: 12px; line-height: 1.4; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal .wd { text-align: center; color: var(--muted); font-size: 14px; padding: 4px 0; }
+  .cal .wd.we { color: var(--orange); }
+  .day { background: var(--panel); border-radius: 8px; min-height: 58px; padding: 4px; position: relative; }
+  .day.blank { background: transparent; }
+  .day .n { font-size: 12px; color: var(--muted); }
+  .day .c { font-size: 16px; font-weight: 700; text-align: center; margin-top: 4px; word-break: break-all; }
+  .day.today { background: var(--hi); outline: 2px solid var(--yellow); }
+  .row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .row .grow { flex: 1; text-align: center; font-weight: 700; }
+  .task { display: flex; gap: 12px; padding: 12px; border-radius: 10px; }
+  .task:nth-child(odd) { background: var(--panel); }
+  .task.now { background: var(--hi); outline: 2px solid var(--yellow); }
+  .task .t { color: var(--cyan); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .task.now .t { color: var(--yellow); }
+  .task .d { color: var(--muted); font-size: 14px; margin-top: 4px; line-height: 1.5; }
+  .mine { outline: 2px solid var(--yellow); color: var(--yellow); }
+  .msg { color: var(--muted); text-align: center; padding: 40px 0; }
+  .help p { line-height: 1.7; margin: 6px 0; }
+  .help h2 { color: var(--yellow); font-size: 18px; margin: 18px 0 6px; }
+  .legend { color: var(--muted); font-size: 13px; margin-top: 10px; line-height: 1.6; }
+  .who { background: var(--panel); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+  .who b { display: inline-block; min-width: 64px; }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; margin: 2px 4px 2px 0; background: #26304a; font-size: 14px; }
+  h3 { margin: 18px 0 8px; font-size: 16px; color: var(--cyan); }
+  .s-day { color: var(--blue); } .s-eve { color: var(--orange); } .s-night { color: var(--purple); }
+  .s-off { color: var(--gray); } .s-rest { color: var(--pink); } .s-other { color: var(--green); }
+</style>
+</head>
+<body>
+<header><h1 id="title">快速查詢</h1><button class="back" id="back">返回</button></header>
+<main id="main"><div class="msg">載入中…</div></main>
+
+<script>
+'use strict';
+// ---------------- 設定 ----------------
+const MY_NAME = '吳玉柱';
+const SCHEDULE_DB = 'https://firestore.googleapis.com/v1/projects/monthlyschedule-a5dea/databases/(default)/documents/schedules/';
+const TIMELINE_DB = 'https://firestore.googleapis.com/v1/projects/project-timeline-d2188/databases/(default)/documents/';
+const PORTAL_URL = 'https://achir1015.github.io/ward-assistant-portal/';
+const CATS = [{ id: 'assistant', label: '病房助理' }, { id: 'nurse', label: '護理師' }];
+const WD = ['日', '一', '二', '三', '四', '五', '六'];
+
+const $main = document.getElementById('main');
+const $title = document.getElementById('title');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const msg = (t) => `<div class="msg">${esc(t)}</div>`;
+
+// ---------------- 路由（用 # 讓手機「返回」也能用）----------------
+const VIEWS = {
+  '': { title: '快速查詢', render: renderHome },
+  schedule: { title: '班表', render: renderSchedule },
+  flow: { title: '工作流程', render: renderFlow },
+  tools: { title: '工作站工具', render: renderTools },
+  help: { title: '說明', render: renderHelp },
+};
+function route() {
+  const v = VIEWS[location.hash.slice(1)] || VIEWS[''];
+  $title.textContent = v.title;
+  v.render();
+  scrollTo(0, 0);
+}
+addEventListener('hashchange', route);
+document.getElementById('back').onclick = () => {
+  if (location.hash) history.length > 1 ? history.back() : (location.hash = '');
+  else if (history.length > 1) history.back();
+  else location.href = './';
+};
+
+function renderHome() {
+  $main.innerHTML = `<div class="grid">
+    <a class="btn big" href="#schedule" style="background:#1d3a5c">📅 班表<small>誰上班、我的班</small></a>
+    <a class="btn big" href="#flow" style="background:#3a2c1d">⏱️ 工作流程<small>現在該做什麼</small></a>
+    <a class="btn big" href="#tools" style="background:#1d3a2c">🧰 工作站工具<small>病房助理工作站</small></a>
+    <a class="btn big" href="#help" style="background:#33264a">❓ 說明<small>小柯怎麼用</small></a>
+  </div>`;
+}
+
+// ---------------- 班表 ----------------
+const sched = { cat: 'assistant', y: 0, m: 0, person: '' , cache: {} };
+function shiftClass(code) {
+  const c = String(code).toUpperCase();
+  if (!c) return '';
+  if (c.includes('例')) return 's-rest';
+  if (c.includes('OFF') || c.includes('國') || c.includes('休')) return 's-off';
+  if (c.includes('D') || c.includes('白值')) return 's-day';
+  if (c.includes('E')) return 's-eve';
+  if (c.includes('N') || c.includes('夜8')) return 's-night';
+  return 's-other';
+}
+async function loadMonth(cat, y, m) {
+  const doc = `${cat}-${y}-${String(m).padStart(2, '0')}`;
+  if (sched.cache[doc]) return sched.cache[doc];
+  const r = await fetch(SCHEDULE_DB + doc);
+  if (r.status === 404) return (sched.cache[doc] = { missing: true, employees: [] });
+  if (!r.ok) throw new Error('讀取失敗（' + r.status + '）');
+  const d = await r.json();
+  const employees = (d.fields?.employees?.arrayValue?.values || []).map((e) => {
+    const f = e.mapValue?.fields || {};
+    const sh = f.shifts?.mapValue?.fields || {};
+    const shifts = {};
+    for (const k in sh) shifts[k] = sh[k].stringValue || '';
+    return { name: f.name?.stringValue || '', shifts };
+  });
+  return (sched.cache[doc] = { employees });
+}
+async function renderSchedule() {
+  const now = new Date();
+  if (!sched.y) { sched.y = now.getFullYear(); sched.m = now.getMonth() + 1; }
+  const catBtns = CATS.map((c) => `<button data-cat="${c.id}" class="${c.id === sched.cat ? 'on' : ''}">${c.label}</button>`).join('');
+  $main.innerHTML = `<div class="row">${catBtns}</div>
+    <div class="row"><button id="prev">‹</button><div class="grow">${sched.y} 年 ${sched.m} 月</div><button id="next">›</button></div>
+    <div id="sbody">${msg('讀取班表中…')}</div>`;
+  $main.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { sched.cat = b.dataset.cat; sched.person = ''; renderSchedule(); });
+  document.getElementById('prev').onclick = () => { if (--sched.m < 1) { sched.m = 12; sched.y--; } renderSchedule(); };
+  document.getElementById('next').onclick = () => { if (++sched.m > 12) { sched.m = 1; sched.y++; } renderSchedule(); };
+
+  const body = document.getElementById('sbody');
+  let data;
+  try { data = await loadMonth(sched.cat, sched.y, sched.m); }
+  catch (e) { body.innerHTML = msg('班表' + e.message + '，請確認網路。'); return; }
+  const label = CATS.find((c) => c.id === sched.cat).label;
+  if (data.missing || !data.employees.length) { body.innerHTML = msg(`${sched.y} 年 ${sched.m} 月${label}班表尚未建立。`); return; }
+
+  const names = data.employees.map((e) => e.name);
+  if (!names.includes(sched.person)) sched.person = names.includes(MY_NAME) ? MY_NAME : names[0];
+  const isThisMonth = sched.y === now.getFullYear() && sched.m === now.getMonth() + 1;
+  const today = now.getDate();
+  const days = new Date(sched.y, sched.m, 0).getDate();
+  const first = new Date(sched.y, sched.m - 1, 1).getDay();
+
+  // 今天（或本月 1 號）誰上什麼班
+  const showDay = isThisMonth ? today : 1;
+  const groups = { 's-day': ['白班', []], 's-eve': ['小夜', []], 's-night': ['大夜', []], 's-other': ['其他', []], 's-off': ['休假', []], 's-rest': ['例假', []] };
+  for (const e of data.employees) {
+    const code = e.shifts[String(showDay)] || '';
+    const cls = shiftClass(code);
+    if (cls) groups[cls][1].push(`<span class="chip ${e.name === MY_NAME ? 'mine' : ''}">${esc(e.name)} <span class="${cls}">${esc(code)}</span></span>`);
+  }
+  let html = `<h3>${isThisMonth ? '今天' : sched.m + '/1'}（${sched.m}/${showDay} 週${WD[new Date(sched.y, sched.m - 1, showDay).getDay()]}）誰上班</h3>`;
+  for (const k of Object.keys(groups)) if (groups[k][1].length)
+    html += `<div class="who"><b class="${k}">${groups[k][0]}</b>${groups[k][1].join('')}</div>`;
+
+  // 個人月曆
+  html += `<h3>個人班表</h3><div class="row"><select id="person">${names.map((n) =>
+    `<option ${n === sched.person ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></div><div class="cal">`;
+  html += WD.map((w, i) => `<div class="wd ${i === 0 || i === 6 ? 'we' : ''}">${w}</div>`).join('');
+  for (let i = 0; i < first; i++) html += '<div class="day blank"></div>';
+  const me = data.employees.find((e) => e.name === sched.person);
+  for (let d = 1; d <= days; d++) {
+    const code = me?.shifts[String(d)] || '';
+    html += `<div class="day ${isThisMonth && d === today ? 'today' : ''}"><div class="n">${d}</div><div class="c ${shiftClass(code)}">${esc(code)}</div></div>`;
+  }
+  html += `</div><div class="legend">代號規則（與月班表系統相同）：含 D 或「白值」＝<span class="s-day">白班</span>；含 E＝<span class="s-eve">小夜</span>；
+    含 N 或「夜8」＝<span class="s-night">大夜</span>；OFF、國、休＝<span class="s-off">休假</span>；例＝<span class="s-rest">例假</span>；其他代號照原樣顯示。</div>`;
+  body.innerHTML = html;
+  document.getElementById('person').onchange = (e) => { sched.person = e.target.value; renderSchedule(); };
+}
+
+// ---------------- 工作流程 ----------------
+const flow = { projects: null, shifts: {}, pi: 0, si: -1 };
+const num = (v) => v ? Number(v.integerValue ?? v.doubleValue ?? v.stringValue ?? 0) : 0;
+const hhmm = (m) => { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+async function fsList(path) {
+  const r = await fetch(TIMELINE_DB + path + '?pageSize=100');
+  if (!r.ok) throw new Error('讀取失敗（' + r.status + '）');
+  return (await r.json()).documents || [];
+}
+async function renderFlow() {
+  $main.innerHTML = msg('讀取工作流程中…');
+  try {
+    if (!flow.projects) {
+      const docs = await fsList('projects');
+      flow.projects = docs.map((d) => ({
+        id: d.name.split('/').pop(), name: d.fields?.name?.stringValue || '（未命名專案）',
+        legacy: !!d.fields?.legacy?.booleanValue, order: num(d.fields?.order),
+      })).sort((a, b) => a.order - b.order);
+    }
+    if (!flow.projects.length) { $main.innerHTML = msg('沒有工作流程資料。'); return; }
+    const p = flow.projects[flow.pi];
+    if (!flow.shifts[p.id]) {
+      const docs = await fsList(p.legacy ? 'shifts' : `projects/${p.id}/shifts`);
+      flow.shifts[p.id] = docs.map((d) => ({
+        name: d.fields?.name?.stringValue || '班別',
+        tasks: (d.fields?.tasks?.arrayValue?.values || []).map((t) => {
+          const f = t.mapValue?.fields || {};
+          return { name: f.name?.stringValue || '', desc: f.desc?.stringValue || '', st: num(f.startMin), en: num(f.endMin) };
+        }).sort((a, b) => a.st - b.st),
+      }));
+    }
+    const shifts = flow.shifts[p.id];
+    const n = new Date(), nm = n.getHours() * 60 + n.getMinutes();
+    const active = (t) => (nm >= t.st && nm < t.en) || (t.en > 1440 && nm + 1440 >= t.st && nm + 1440 < t.en);
+    if (flow.si < 0 || flow.si >= shifts.length) {     // 預設選「現在有任務進行中」的班別
+      flow.si = Math.max(0, shifts.findIndex((s) => s.tasks.some(active)));
+    }
+    const s = shifts[flow.si];
+    let html = `<div class="row">${flow.projects.map((pj, i) => `<button data-p="${i}" class="${i === flow.pi ? 'on' : ''}">${esc(pj.name)}</button>`).join('')}</div>`;
+    html += `<div class="row">${shifts.map((sh, i) => `<button data-s="${i}" class="${i === flow.si ? 'on' : ''}">${esc(sh.name)}</button>`).join('')}</div>`;
+    if (!s || !s.tasks.length) html += msg('這個班別沒有任務。');
+    else html += '<div>' + s.tasks.map((t) => `<div class="task ${active(t) ? 'now' : ''}">
+        <div class="t">${hhmm(t.st)}<br>${hhmm(t.en)}</div>
+        <div><div>${active(t) ? '▶ ' : ''}${esc(t.name)}</div>${t.desc ? `<div class="d">${esc(t.desc)}</div>` : ''}</div></div>`).join('') + '</div>';
+    html += `<div class="legend">現在 ${hhmm(nm)}，黃框是此刻進行中的任務。</div>`;
+    $main.innerHTML = html;
+    $main.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => { flow.pi = +b.dataset.p; flow.si = -1; renderFlow(); });
+    $main.querySelectorAll('[data-s]').forEach((b) => b.onclick = () => { flow.si = +b.dataset.s; renderFlow(); });
+  } catch (e) { $main.innerHTML = msg('工作流程' + e.message + '，請確認網路。'); }
+}
+
+// ---------------- 工作站工具 ----------------
+const portal = { cats: null, tools: null, cat: '' };
+const CAT_COLOR = { admin: 'var(--blue)', learn: 'var(--green)', tools: 'var(--orange)', music: 'var(--pink)' };
+function jsField(s, key) {
+  const m = s.match(new RegExp(key + "\\s*:\\s*(['\"])((?:\\\\.|(?!\\1).)*)\\1"));
+  return m ? m[2] : '';
+}
+async function renderTools() {
+  $main.innerHTML = msg('讀取工具清單中…');
+  try {
+    if (!portal.tools) {
+      const html = await (await fetch(PORTAL_URL, { cache: 'no-cache' })).text();
+      portal.cats = [...html.matchAll(/new Category\(\s*'([^']*)'\s*,\s*'([^']*)'/g)].map((m) => ({ id: m[1], name: m[2] }));
+      portal.tools = [...html.matchAll(/new Tool\(\{([\s\S]*?)\}\)/g)].map((m) => ({
+        name: jsField(m[1], 'name'), desc: jsField(m[1], 'desc'), url: jsField(m[1], 'url'), cat: jsField(m[1], 'category'),
+      })).filter((t) => t.name && t.url);
+    }
+    if (!portal.tools.length) throw new Error('沒有讀到工具');
+    const list = portal.tools.filter((t) => !portal.cat || t.cat === portal.cat);
+    let h = `<div class="row"><button data-c="" class="${!portal.cat ? 'on' : ''}">全部</button>${portal.cats.map((c) =>
+      `<button data-c="${c.id}" class="${c.id === portal.cat ? 'on' : ''}">${esc(c.name)}</button>`).join('')}</div>`;
+    h += '<div class="tools">' + list.map((t) => `<a class="btn tool" href="${esc(t.url)}" style="border-left-color:${CAT_COLOR[t.cat] || 'var(--blue)'}">
+        <span>${esc(t.name)}</span>${t.desc ? `<small>${esc(t.desc)}</small>` : ''}</a>`).join('') + '</div>';
+    h += `<div class="legend">完整入口：<a href="${PORTAL_URL}" style="color:var(--cyan)">病房助理工作站</a></div>`;
+    $main.innerHTML = h;
+    $main.querySelectorAll('[data-c]').forEach((b) => b.onclick = () => { portal.cat = b.dataset.c; renderTools(); });
+  } catch (e) { $main.innerHTML = msg('工具清單讀取失敗（' + e.message + '），請確認網路。'); }
+}
+
+// ---------------- 說明 ----------------
+function renderHelp() {
+  $main.innerHTML = `<div class="help">
+    <h2>跟小柯聊天</h2>
+    <p>直接說話小柯就會開始聽；也可以點一下螢幕再說。小柯說話時點螢幕可以打斷。</p>
+    <p>可以問天氣、新聞等即時資訊，小柯會自己上網查。太久沒互動會變成想睡的表情，說話或點螢幕就會叫醒。</p>
+    <h2>快速查詢（這一頁）</h2>
+    <p>在小柯 App 裡長按螢幕就會打開這裡。</p>
+    <p><b>班表</b>：切換病房助理／護理師、左右切換月份；上方是今天誰上班，下方是個人月曆（預設顯示你自己，黃框是今天）。</p>
+    <p><b>工作流程</b>：依專案與班別列出任務時間，黃框是現在正在進行的任務。</p>
+    <p><b>工作站工具</b>：病房助理工作站的所有工具，點一下直接開啟。</p>
+    <h2>資料來源</h2>
+    <p>班表來自月班表管理系統，工作流程來自專案進度時間軸，工具清單來自病房助理工作站，每次打開都會讀最新資料。</p>
+    <h2>聯絡</h2>
+    <p>小柯由吳玉柱先生與 Claude AI 共同開發，有任何意見歡迎寫信到 achir1015@gmail.com。</p>
+  </div>`;
+}
+
+route();
+</script>
+</body>
+</html>
