@@ -71,75 +71,126 @@ function stateLabel() {
   }[face.state] || (settings.vad ? '直接說話或點螢幕' : '點螢幕說話');
 }
 
-function roundRect(x, y, w, h, r) {
+// ---- 頭盔機器人（與 LX04 / P4 版同一造型）----
+const GLOW = '#40e8ff', GLOW_DIM = '#1e6e87', RED2 = '#ff4664', PINK = '#ff6f91', VISOR = '#162a42';
+
+function rrPath(x, y, w, h, r) {
   g.beginPath();
   g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h);
-  g.fill();
+}
+function rr(x, y, w, h, r, c) { g.fillStyle = c; rrPath(x, y, w, h, r); g.fill(); }
+function rrGrad(x, y, w, h, r, c1, c2) {
+  const gr = g.createLinearGradient(0, y, 0, y + h);
+  gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+  g.fillStyle = gr; rrPath(x, y, w, h, r); g.fill();
+}
+function ell(cx, cy, rx, ry, c) { g.fillStyle = c; g.beginPath(); g.ellipse(cx, cy, Math.max(rx, 0.5), Math.max(ry, 0.5), 0, 0, Math.PI * 2); g.fill(); }
+function glowOn(c, b) { g.shadowColor = c; g.shadowBlur = b; }
+function glowOff() { g.shadowBlur = 0; }
+function gArc(cx, cy, r, a0, a1, th, c) {   // 角度：度，順時針（0 = 右）
+  glowOn(c, 12); g.strokeStyle = c; g.lineWidth = th; g.lineCap = 'round';
+  g.beginPath(); g.arc(cx, cy, r, a0 * Math.PI / 180, a1 * Math.PI / 180); g.stroke(); glowOff();
+}
+function gLine(x0, y0, x1, y1, th, c) {
+  glowOn(c, 12); g.strokeStyle = c; g.lineWidth = th; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); glowOff();
+}
+function gPill(cx, cy, w, h, c) { glowOn(c, 14); rr(cx - w / 2, cy - h / 2, w, h, w / 2, c); glowOff(); }
+function gHeart(cx, cy, r, c) {
+  glowOn(c, 12); g.fillStyle = c; g.beginPath();
+  g.moveTo(cx, cy + r * 0.9);
+  g.bezierCurveTo(cx - r * 1.3, cy - r * 0.1, cx - r * 0.7, cy - r, cx, cy - r * 0.3);
+  g.bezierCurveTo(cx + r * 0.7, cy - r, cx + r * 1.3, cy - r * 0.1, cx, cy + r * 0.9);
+  g.fill(); glowOff();
 }
 
-function arcStroke(cx, cy, rx, ry, a0, a1, width) {
-  g.beginPath();
-  g.lineWidth = width;
-  g.lineCap = 'round';
-  g.ellipse(cx, cy, rx, ry, 0, a0, a1);
-  g.stroke();
+function expression() {
+  if (face.state === 'sleepy') return 'sleepy';
+  if (face.state === 'listening') return 'listen';
+  if (face.state === 'thinking') return 'think';
+  if (face.state === 'error') return 'sad';
+  return ['love', 'surprise', 'sad', 'angry', 'wink', 'shy', 'happy'].includes(face.emotion) ? face.emotion : 'normal';
 }
 
-function drawEye(ex, ey, ew, eh, side, blink, t) {
-  g.fillStyle = '#fff';
-  g.strokeStyle = '#fff';
-  if (face.state === 'sleepy' || blink) { roundRect(ex - ew / 2, ey - 8, ew, 16, 8); return; }
-  const e = face.emotion;
-  if (e === 'love') {
-    const r = 34 * (1 + Math.sin(t * 6) * 0.06);
-    g.fillStyle = '#ff6f91';
-    g.beginPath();
-    g.moveTo(ex, ey + 2.1 * r);
-    g.bezierCurveTo(ex - 2.6 * r, ey + 0.2 * r, ex - 1.4 * r, ey - 1.9 * r, ex, ey - 0.6 * r);
-    g.bezierCurveTo(ex + 1.4 * r, ey - 1.9 * r, ex + 2.6 * r, ey + 0.2 * r, ex, ey + 2.1 * r);
-    g.fill();
-    return;
-  }
-  if (e === 'happy' || e === 'shy' || (e === 'wink' && side > 0)) {
-    arcStroke(ex, ey + eh / 8, ew / 2, eh * 0.375, Math.PI * 1.11, Math.PI * 1.89, 16);
-    return;
-  }
-  if (e === 'sad') { ey += 12; eh *= 0.8; }
-  if (e === 'surprise') { ew *= 1.15; eh *= 1.15; }
-  const lookX = face.state === 'thinking' ? Math.sin(t * 3) * 16 : 0;
-  roundRect(ex - ew / 2 + lookX, ey - eh / 2, ew, eh, ew / 2);
-  if (e === 'angry' || e === 'sad') {
-    const s = e === 'angry' ? side : -side;
-    g.fillStyle = bgColor();
-    g.beginPath();
-    g.moveTo(ex - s * ew, ey - eh);
-    g.lineTo(ex + s * ew, ey - eh);
-    g.lineTo(ex + s * ew, ey - eh * (e === 'angry' ? 0.2 : 0.25));
-    g.closePath();
-    g.fill();
-  }
-}
+function drawRobot(X, Y, s, ex, lx, ly, blink, mouth, t) {
+  const S = (v) => v * s;
+  const c = ex === 'angry' ? RED2 : GLOW;
 
-function drawMouth(mx, my, t) {
-  g.fillStyle = '#fff';
-  g.strokeStyle = '#fff';
-  if (face.state === 'speaking') {
-    const open = 10 + Math.abs(Math.sin(t * 14)) * 22;
-    roundRect(mx - 30, my - open / 2, 60, open, 14);
-  } else if (face.state === 'listening') {
-    g.fillStyle = '#7cf29c';
-    g.beginPath(); g.arc(mx, my, 10 + face.level * 30, 0, Math.PI * 2); g.fill();
-  } else if (face.state === 'thinking') {
+  // 耳罩
+  for (const side of [-1, 1]) {
+    const cx = X + side * S(121);
+    rrGrad(cx - S(19), Y - S(44), S(38), S(92), S(16), '#b0bed2', '#687892');
+    rr(cx - S(5) + side * S(6), Y - S(30), S(9), S(56), S(5), '#ced8e8');
+  }
+  // 頭盔：陰影 + 白色漸層 + 反光
+  rr(X - S(125), Y - S(96), S(250), S(198), S(90), '#808a9a');
+  rrGrad(X - S(124), Y - S(99), S(248), S(194), S(88), '#fcfdff', '#c4cbd6');
+  ell(X - S(62), Y - S(80), S(34), S(9), '#ffffff');
+  // 面罩
+  rr(X - S(102), Y - S(71), S(204), S(142), S(56), '#344660');
+  rrGrad(X - S(98), Y - S(67), S(196), S(134), S(52), '#1e3450', '#091220');
+  ell(X - S(50), Y - S(52), S(32), S(7), '#2c4666');
+
+  const ey = Y - S(10), dx = S(44), my = Y + S(34), th = Math.max(2, S(5));
+  const talking = mouth > 0.05;
+  const smiley = ['normal', 'happy', 'wink', 'love', 'shy'].includes(ex);
+
+  if (ex === 'shy' || ex === 'love')
+    for (const side of [-1, 1]) ell(X + side * S(68), Y + S(20), S(15), S(6), 'rgba(255,111,145,.55)');
+
+  // 嘴巴
+  if (talking) {
+    const rx = S(15), ry = Math.max(S(4), S(4 + 13 * mouth));
+    glowOn(c, 12); ell(X, my - S(4), rx, ry, c); glowOff();
+    if (ry > S(7)) ell(X, my - S(4), rx - S(5), ry - S(5), '#0e3c52');
+  } else if (smiley) {
+    gArc(X, my - S(18), S(18), 35, 145, th, c);                 // 微笑 ︶
+  } else if (ex === 'surprise' || ex === 'listen') {
+    const r = S(ex === 'surprise' ? 9 : 7) + (ex === 'listen' ? Math.min(S(6), face.level * S(10)) : 0);
+    glowOn(c, 12); ell(X, my - S(2), r, r, c); glowOff();
+    if (ex === 'listen') ell(X, my - S(2), Math.max(1, r - th), Math.max(1, r - th), VISOR);
+  } else if (ex === 'sad' || ex === 'angry') {
+    gArc(X, my + S(12), S(16), 215, 325, th, c);                // 嘴角下垂 ︵
+  } else if (ex === 'think') {
     for (let i = 0; i < 3; i++) {
-      const a = Math.max(0, Math.sin(t * 6 - i * 0.8));
-      g.beginPath(); g.arc(mx - 30 + i * 30, my - a * 10, 8, 0, Math.PI * 2); g.fill();
+      const on = Math.floor(t * 4) % 3 === i;
+      glowOn(c, on ? 10 : 0); ell(X + (i - 1) * S(14), my - S(2), S(4), S(4), on ? c : GLOW_DIM); glowOff();
     }
-  } else if (face.emotion === 'sad') {
-    arcStroke(mx, my + 20, 34, 20, Math.PI * 1.11, Math.PI * 1.89, 10);
-  } else if (face.emotion === 'surprise') {
-    g.lineWidth = 10; g.beginPath(); g.arc(mx, my + 6, 16, 0, Math.PI * 2); g.stroke();
+  } else if (ex === 'sleepy') {
+    gArc(X, my + S(4), S(8), 200, 340, th, c);
   } else {
-    arcStroke(mx, my - 6, 34, 20, Math.PI * 0.11, Math.PI * 0.89, 10);
+    gLine(X - S(13), my - S(2), X + S(13), my - S(2), th, c);
+  }
+
+  // 眼睛
+  const ew = S(22), eh = S(32);
+  for (const side of [-1, 1]) {
+    const cx = X + side * dx, x = cx + lx, y = ey + ly;
+    switch (ex) {
+      case 'happy': case 'shy': gArc(cx, ey + S(8), S(12), 200, 340, th + 1, c); break;      // 瞇眼笑 ∩
+      case 'wink': if (side < 0) gLine(cx - S(11), ey, cx + S(11), ey, th + 1, c); else gPill(x, y, ew, eh, c); break;
+      case 'love': gHeart(cx, ey - S(2), S(15) + S(2) * Math.sin(t * 6.7), PINK); break;
+      case 'surprise': glowOn(c, 14); ell(cx, ey, S(10), S(10), c); glowOff(); break;
+      case 'sleepy': gArc(cx, ey - S(6), S(11), 20, 160, th, c); break;                      // 想睡 ∪
+      case 'think': gPill(cx + S(6), ey - S(8), ew, S(20), c); break;
+      default: {
+        const w = ex === 'listen' ? S(25) : ew;
+        const hh = ex === 'listen' ? S(36) : ex === 'angry' ? S(24) : ex === 'sad' ? S(26) : eh;
+        if (blink && ex !== 'listen') gLine(x - w / 2, y, x + w / 2, y, th + 1, c);
+        else gPill(x, y, w, hh, c);
+        if (ex === 'sad') gLine(x - S(13), y - hh / 2 - S(7) + S(5) * side, x + S(13), y - hh / 2 - S(7) - S(5) * side, th, c);
+        if (ex === 'angry') gLine(x - S(13), y - hh / 2 - S(9) - S(6) * side, x + S(13), y - hh / 2 - S(9) + S(6) * side, th, c);
+      }
+    }
+  }
+
+  // 想睡 Zzz（頭盔外右上）
+  if (ex === 'sleepy') {
+    const kz = Math.floor(t * 2) % 3;
+    glowOn(GLOW, 8); g.fillStyle = GLOW; g.textBaseline = 'alphabetic';
+    g.font = `bold ${14 * s + 8}px sans-serif`; g.fillText('z', X + 100 * s, Y - 78 * s - kz * 3);
+    g.font = `bold ${20 * s + 10}px sans-serif`; g.fillText('Z', X + 114 * s, Y - 96 * s - kz * 3);
+    glowOff();
   }
 }
 
@@ -165,25 +216,19 @@ function draw() {
 
   const portrait = h > w;
   const faceH = h * (portrait ? 0.5 : 0.62);
-  const k = Math.min(w / 800, faceH / 300);
+  const k = Math.min(w / 440, faceH / 300);   // 頭盔機器人約 400 寬，以 440x300 為設計框
   const ui = Math.max(0.8, Math.min(1.6, Math.min(w, h) / 420));
 
-  // 臉（以 800x300 設計後縮放）
+  // 臉：頭盔機器人（以 800x300 設計後縮放）
   g.save();
-  g.translate((w - 800 * k) / 2, (faceH - 300 * k) / 2 + (portrait ? 20 : 0));
+  g.translate((w - 440 * k) / 2, (faceH - 300 * k) / 2 + (portrait ? 20 : 0));
   g.scale(k, k);
-  let cy = 160;
-  const cx = 400, eyeDx = 136;
-  const blink = face.state !== 'sleepy' && (t % 4.2) < 0.13;
-  cy += face.state === 'speaking' ? Math.sin(t * 9) * 4 : Math.sin(t * 2.2) * 6;
-  drawEye(cx - eyeDx, cy, 92, 128, -1, blink, t);
-  drawEye(cx + eyeDx, cy, 92, 128, 1, blink, t);
-  if (['love', 'shy', 'happy'].includes(face.emotion)) {
-    g.fillStyle = 'rgba(255,111,145,.4)';
-    g.beginPath(); g.ellipse(cx - eyeDx - 55, cy + 78, 35, 17, 0, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.ellipse(cx + eyeDx + 55, cy + 78, 35, 17, 0, 0, Math.PI * 2); g.fill();
-  }
-  drawMouth(cx, cy + 95, t);
+  const ex = expression();
+  const blink = ex !== 'sleepy' && ex !== 'listen' && (t % 4.2) < 0.13;
+  const lx = ex === 'think' ? Math.sin(t * 3) * 8 : 0, ly = ex === 'think' ? Math.cos(t * 2.1) * 4 : 0;
+  const mouth = face.state === 'speaking' ? 0.3 + Math.abs(Math.sin(t * 13)) * 0.7 : 0;
+  const bob = face.state === 'speaking' ? Math.sin(t * 9) * 3 : Math.sin(t * 2.2) * 4;
+  drawRobot(220, 158 + bob, 1.35, ex, lx, ly, blink, mouth, t);
   g.restore();
 
   // 狀態列
