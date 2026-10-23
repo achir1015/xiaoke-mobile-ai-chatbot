@@ -38,10 +38,12 @@ public class PanelActivity extends Activity {
         web.loadUrl(Config.PANEL_URL);
     }
 
-    /** 面板本身留在 App 內；工作站工具等其他網址交給系統瀏覽器開。 */
+    /** 面板本身留在 App 內；面板想回網站首頁（按「返回」）就關掉面板回小柯；其他網址交給系統瀏覽器開。 */
     private boolean openOutside(Uri uri) {
         String u = uri.toString();
         if (u.startsWith(Config.PANEL_URL)) return false;
+        String site = Config.PANEL_URL.substring(0, Config.PANEL_URL.lastIndexOf('/') + 1);
+        if (u.startsWith(site)) { finish(); return true; }
         try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) {}
         return true;
     }

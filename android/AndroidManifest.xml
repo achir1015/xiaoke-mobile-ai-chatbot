@@ -15,6 +15,7 @@
 
     <application
         android:label="小柯"
+        android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">

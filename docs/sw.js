@@ -1,5 +1,5 @@
 // 只快取 App 本身的檔案；呼叫 OpenAI 的請求一律走網路
-const CACHE = 'xiaoke-v1';
+const CACHE = 'xiaoke-v2';   // 改版（例如換圖示）時 +1，舊快取會清掉
 const FILES = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
