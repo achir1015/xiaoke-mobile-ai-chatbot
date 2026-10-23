@@ -2,7 +2,9 @@ package com.achir.xiaoke;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
@@ -36,7 +38,7 @@ public class MainActivity extends Activity {
         face = new FaceView(this);
         face.setStatus("嗨！我是" + Config.ROBOT_NAME + "，有什麼想聊的嗎？");
         face.setOnTouchListener(this::onTouch);
-        face.setOnLongClickListener(v -> { showInfo(); return true; });
+        face.setOnLongClickListener(v -> { openPanel(); return true; });
         setContentView(face);
         hideSystemUi();
     }
@@ -83,11 +85,10 @@ public class MainActivity extends Activity {
         return false;   // 讓長按事件繼續
     }
 
-    private void showInfo() {
-        String err = ai.lastError.isEmpty() ? "無" : ai.lastError;
-        Toast.makeText(this, Config.ROBOT_NAME + " v1.0\n模型：" + Config.CHAT_MODEL
-                + "\n最近錯誤：" + err + "\n（對話記憶已清除）", Toast.LENGTH_LONG).show();
-        ai.clearHistory();
+    // 長按：快速查詢面板（班表、工作流程、工作站工具、說明）
+    private void openPanel() {
+        ai.stopSpeaking();
+        startActivity(new Intent(this, PanelActivity.class));
     }
 
     // ---------------- 主迴圈 ----------------
@@ -193,6 +194,15 @@ public class MainActivity extends Activity {
             return;
         }
         face.setUserText(text);
+        if (isSongRequest(text)) { singSong(); return; }
+        if (isForgetRequest(text)) {
+            ai.clearHistory();
+            face.setEmotion("wink");
+            face.setSubtitle("好，剛剛聊的我都忘掉囉！");
+            face.setState(FaceView.State.SPEAKING);
+            ai.speak("好，剛剛聊的我都忘掉囉！");
+            return;
+        }
         String reply = ai.chat(text);
         if (reply.isEmpty()) {
             showError("連線失敗：" + ai.lastError);
@@ -202,6 +212,36 @@ public class MainActivity extends Activity {
         face.setSubtitle(reply);
         face.setState(FaceView.State.SPEAKING);
         if (!ai.speak(reply)) showError("語音播放失敗：" + ai.lastError);
+    }
+
+    // ---------------- 唱歌 ----------------
+    private static boolean isSongRequest(String t) {
+        for (String k : new String[]{"唱歌", "唱首歌", "唱一首", "唱個歌", "唱首", "來首歌", "放首歌", "聽歌"})
+            if (t.contains(k)) return true;
+        return false;
+    }
+
+    private static boolean isForgetRequest(String t) {
+        for (String k : new String[]{"清除記憶", "忘記剛剛", "忘掉剛剛", "重新開始聊"})
+            if (t.contains(k)) return true;
+        return false;
+    }
+
+    /** 隨機挑一首自己創作的歌：先介紹歌名，再用 YouTube 播放。 */
+    private void singSong() {
+        Songs.Song s = Songs.pick();
+        String intro = s != null
+                ? "我來唱《" + s.title + "》給你聽！這是" + Config.SONG_COMPOSER + "創作的歌，用 YouTube 播放喔！"
+                : "我來唱" + Config.SONG_COMPOSER + "創作的歌給你聽！用 YouTube 播放喔！";
+        String url = s != null ? Songs.watchUrl(s) : Songs.playlistUrl();
+        face.setEmotion("love");
+        face.setSubtitle(intro);
+        face.setState(FaceView.State.SPEAKING);
+        ai.speak(intro);
+        runOnUiThread(() -> {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+            catch (Exception e) { Toast.makeText(this, "找不到可以播放 YouTube 的 App", Toast.LENGTH_LONG).show(); }
+        });
     }
 
     private void showError(String msg) {

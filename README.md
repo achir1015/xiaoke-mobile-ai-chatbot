@@ -16,6 +16,10 @@
 - 大眼睛表情（開心、愛心、驚訝、難過、生氣、眨眼、害羞）＋字幕
 - 會上網查天氣、新聞，只用口語唸重點
 - 記得最近幾句對話；直向、橫向螢幕都能用
+- 臉是頭盔機器人造型（與 LX04 / P4 版相同）
+
+**快速查詢面板**：<https://achir1015.github.io/xiaoke-mobile-ai-chatbot/panel.html>
+班表（病房助理／護理師，今天誰上班＋個人月曆）、工作流程（標出現在進行中的任務）、工作站工具、說明。
 
 ---
 
@@ -61,8 +65,15 @@ python -m http.server 8790 --directory docs
 2. 用可傳資料的 USB 線接上電腦並允許偵錯。
 3. `cd android && python build.py install`（自動授予麥克風權限並啟動）。
 
+### Android 版專屬功能
+- **長按螢幕**：打開快速查詢面板（App 內顯示 `panel.html`；面板裡的工具連結用系統瀏覽器開）。
+- **說「唱首歌」**：從 YouTube 歌單隨機挑一首吳玉柱創作的歌，先唸出歌名再開 YouTube 播放（歌單讀不到時直接開整份歌單）。
+- **說「清除記憶」／「忘記剛剛」**：清掉對話記憶。
+- 系統提示會附上當天農曆（`Lunar.java`，離線計算），可以問「今天農曆幾號」。
+
 ### 參數
-在 `Config.java` 調整：模型、聲音、語音偵測靈敏度（`VAD_MIN_RMS`、`VAD_RATIO`、`VAD_SILENCE_MS`）、是否上網搜尋、`AUTO_START_ON_BOOT`（開機自動啟動，手機建議關閉）。
+在 `Config.java` 調整：模型、聲音、語音偵測靈敏度（`VAD_MIN_RMS`、`VAD_RATIO`、`VAD_SILENCE_MS`）、是否上網搜尋、`AUTO_START_ON_BOOT`（開機自動啟動，手機建議關閉）、唱歌歌單 `YT_PLAYLIST_ID`／`SONG_COMPOSER`、面板網址 `PANEL_URL`。
+從舊版 `Config.java` 升級時，記得把 `Config.example.java.txt` 新增的這幾個設定複製過去，否則會編譯失敗。
 
 ---
 

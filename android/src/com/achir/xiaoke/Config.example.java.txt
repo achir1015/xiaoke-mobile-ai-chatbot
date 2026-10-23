@@ -30,5 +30,13 @@ public final class Config {
     // 開機自動開啟小柯（手機建議 false；專用平板/音箱可設 true）
     public static final boolean AUTO_START_ON_BOOT = false;
 
+    // 唱歌：說「唱首歌」從這個 YouTube 播放清單隨機一首開始播
+    public static final String YT_PLAYLIST_ID = "PLMiXt5EIkXI0";
+    public static final int SONG_COUNT = 26;            // 歌單歌曲數（隨機選曲範圍）
+    public static final String SONG_COMPOSER = "吳玉柱";
+
+    // 長按螢幕開啟的快速查詢選單（班表、工作流程、工作站工具、說明）
+    public static final String PANEL_URL = "https://achir1015.github.io/xiaoke-mobile-ai-chatbot/panel.html";
+
     private Config() {}
 }

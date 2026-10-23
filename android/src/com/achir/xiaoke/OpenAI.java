@@ -204,7 +204,7 @@ final class OpenAI {
                 + "並說有任何意見可以寫信到 achir1015@gmail.com。"
                 + "每次回答的最開頭，加上一個代表你當下心情的標籤，只能是以下其中一個："
                 + "[happy] [love] [surprise] [sad] [angry] [wink] [shy]，標籤後面直接接回答內容。"
-                + "現在時間：" + f.format(new Date()) + "。";
+                + "現在時間：" + f.format(new Date()) + "（農曆" + Lunar.full(new Date()) + "）。";
         return p;
     }
 
