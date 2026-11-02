@@ -1,4 +1,4 @@
-# 小柯 手機 App 聊天機器人
+# 小柯 手機 App 聊天機器人 https://github.com/achir1015/xiaoke-mobile-ai-chatbot/
 
 小柯是一個有大眼睛表情的 OpenAI 語音聊天機器人，可以裝在手機上隨身聊天。
 
