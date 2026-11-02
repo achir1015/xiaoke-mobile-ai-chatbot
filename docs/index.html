@@ -21,7 +21,7 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
     font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
-  #face { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  #face { position: fixed; top: 0; left: 0; width: 100%; height: 100%; touch-action: none; }
   .btn { border: 1px solid var(--border); background: var(--panel); color: var(--fg); border-radius: 12px;
     padding: 10px 16px; font-size: 16px; cursor: pointer; }
   .btn.primary { background: var(--accent); color: #0b1a10; border-color: var(--accent); font-weight: 600; }
@@ -32,7 +32,7 @@
     display: none; gap: 8px; z-index: 3; }
   #typebar input { flex: 1; min-width: 0; font-size: 16px; padding: 10px 12px; border-radius: 12px;
     border: 1px solid var(--border); background: var(--panel); color: var(--fg); }
-  .overlay { position: fixed; inset: 0; background: rgba(8, 11, 20, .92); display: flex; align-items: center;
+  .overlay { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(8, 11, 20, .92); display: flex; align-items: center;
     justify-content: center; z-index: 10; padding: 16px; }
   .card { width: 100%; max-width: 440px; background: var(--panel); border: 1px solid var(--border);
     border-radius: 18px; padding: 22px; }
@@ -45,7 +45,7 @@
   .card label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); }
   .card label.check input { width: auto; }
   .hidden { display: none !important; }
-  .err { color: var(--danger); }
+  .card p.err { color: var(--danger); }
 </style>
 </head>
 <body>
@@ -66,6 +66,7 @@
     <h1>嗨！我是小柯 👋</h1>
     <p>點下面的按鈕開始聊天。直接說話我就會聽，也可以點一下螢幕再說話；我說話時點螢幕可以打斷我。</p>
     <p id="startMsg" class="err"></p>
+    <p id="startInfo" style="font-size:13px"></p>
     <div class="row"><button class="btn primary" id="btnStart">點一下開始</button></div>
   </div>
 </div>
@@ -74,6 +75,7 @@
   <form class="card" id="settingsForm">
     <h1>設定</h1>
     <p>OpenAI API 金鑰只會存在這支手機的瀏覽器裡，不會上傳到其他地方。</p>
+    <p id="settingsMsg" class="err"></p>
     <label for="apiKey">OpenAI API 金鑰</label>
     <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" required>
     <label for="voice">聲音</label>
@@ -92,6 +94,19 @@
   </form>
 </div>
 
-<script src="app.js"></script>
+<script>
+// 舊瀏覽器看不懂 app.js 時，開始按鈕不會有反應；這段用舊語法寫，負責把原因顯示出來
+window.addEventListener('load', function () {
+  if (window.xiaokeReady) return;
+  var show = function () {
+    document.getElementById('startMsg').textContent = '程式無法載入：瀏覽器版本可能太舊，或網路中斷。請更新系統或瀏覽器後重新整理。（代碼：AppNotLoaded）';
+    var m = /Android [0-9.]+|OS [0-9_]+ like Mac/.exec(navigator.userAgent);
+    document.getElementById('startInfo').textContent = '裝置：' + (m ? m[0].replace(' like Mac', '').replace('OS ', 'iOS ').replace(/_/g, '.') : navigator.userAgent);
+  };
+  show();
+  document.getElementById('btnStart').addEventListener('click', show);
+});
+</script>
+<script src="app.js?v=20261102"></script>
 </body>
 </html>

@@ -277,7 +277,9 @@ const RATE = 16000;
 
 async function initAudio() {
   ctx = new (window.AudioContext || window.webkitAudioContext)();
-  await ctx.resume();
+  await Promise.race([ctx.resume(), new Promise((_, no) => setTimeout(() => {
+    const e = new Error('音訊啟動逾時'); e.name = 'AudioTimeout'; no(e);
+  }, 5000))]);
   try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch { /* 舊版 Safari */ }
   micStream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
@@ -315,7 +317,9 @@ let noise = 150;
 let preroll = [];
 let rec = null;   // { chunks, speechMs, silenceMs, totalMs, thresh, manual }
 
+let lastFrameAt = 0;
 function onFrame(f32) {
+  lastFrameAt = Date.now();
   if (busy) return;
   const pcm = toPcm16k(f32);
   const ms = pcm.length / RATE * 1000;
@@ -381,15 +385,30 @@ function wav(pcm) {
 
 // ---------- OpenAI ----------
 async function api(path, opts) {
-  const r = await fetch(API + path, {
-    ...opts,
-    headers: { Authorization: 'Bearer ' + settings.key, ...(opts.headers || {}) },
-  });
+  if (navigator.onLine === false) throw new Error('目前沒有網路，請檢查 Wi-Fi 或行動數據。（代碼：Offline）');
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 60000);
+  let r;
+  try {
+    r = await fetch(API + path, {
+      ...opts,
+      signal: abort.signal,
+      headers: { Authorization: 'Bearer ' + settings.key, ...(opts.headers || {}) },
+    });
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? 'OpenAI 太久沒有回應，請再試一次。（代碼：Timeout）'
+      : '連不上 OpenAI，請檢查網路後再試一次。（代碼：NetworkError）');
+  } finally {
+    clearTimeout(timer);
+  }
   if (!r.ok) {
-    let msg = r.status + '';
-    try { msg += ' ' + ((await r.json()).error?.message || ''); } catch { /* 非 JSON */ }
-    if (r.status === 401) msg = '金鑰錯誤，請到設定重新輸入';
-    throw new Error(msg);
+    let detail = '', type = '';
+    try { const j = (await r.json()).error || {}; detail = j.message || ''; type = j.code || j.type || ''; } catch { /* 非 JSON */ }
+    if (r.status === 401) throw new Error('金鑰錯誤，請到設定重新輸入。（代碼：401）');
+    if (r.status === 429 && type === 'insufficient_quota') throw new Error('OpenAI 帳號額度用完了，請到 OpenAI 後台儲值。（代碼：429）');
+    if (r.status === 429) throw new Error('OpenAI 請求太頻繁，請等一下再試。（代碼：429）');
+    if (r.status >= 500) throw new Error('OpenAI 服務暫時有問題，請稍後再試。（代碼：' + r.status + '）');
+    throw new Error('OpenAI 回傳錯誤：' + detail + '（代碼：' + r.status + '）');
   }
   return r;
 }
@@ -512,7 +531,7 @@ async function showError(msg) {
   face.state = 'error';
   face.emotion = 'sad';
   face.subtitle = msg;
-  await new Promise(r => setTimeout(r, 2500));
+  await new Promise(r => setTimeout(r, 6000));   // 留時間讀完原因
   face.emotion = 'happy';
 }
 
@@ -539,16 +558,131 @@ canvas.addEventListener('pointerup', () => {
   }
 });
 
+// ---------- 開始：進不去時一定要把原因顯示在畫面上 ----------
+const IN_APP_BROWSERS = [[/Line\/[0-9]/i, 'LINE'], [/FBAN|FBAV|FB_IAB/i, 'Facebook'], [/Instagram/i, 'Instagram'],
+  [/MicroMessenger/i, '微信'], [/; wv\)/i, 'App']];
+function inAppBrowser() {
+  const hit = IN_APP_BROWSERS.find(([re]) => re.test(navigator.userAgent));
+  return hit ? hit[1] : '';
+}
+function openInBrowserHint() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) ? '請改用 Safari 開啟這個網址。' : '請改用 Chrome 開啟這個網址。';
+}
+
+// 裝置資訊：Chrome 的 userAgent 固定寫 Android 10，要問 userAgentData 才是真實版本
+async function deviceInfo() {
+  const ua = navigator.userAgent;
+  let os = /Android ([0-9.]+)/.exec(ua) ? 'Android ' + RegExp.$1
+    : /OS ([0-9_]+) like Mac/.exec(ua) ? 'iOS ' + RegExp.$1.replace(/_/g, '.')
+      : /Windows|Macintosh|Linux/.exec(ua)?.[0] || '未知系統';
+  let model = '';
+  try {
+    const d = await navigator.userAgentData?.getHighEntropyValues(['platformVersion', 'model']);
+    if (d && navigator.userAgentData.platform === 'Android') {
+      os = 'Android ' + d.platformVersion.split('.')[0];
+      model = d.model || '';
+    }
+  } catch { /* 不支援 */ }
+  const b = /(SamsungBrowser|EdgA|Firefox|FxiOS|CriOS|Chrome)\/([0-9]+)/.exec(ua)
+    || (/Version\/([0-9.]+).*Safari/.exec(ua) ? [0, 'Safari', RegExp.$1] : null);
+  const browser = inAppBrowser() ? inAppBrowser() + ' 內建瀏覽器' : b ? b[1].replace('CriOS', 'Chrome').replace('FxiOS', 'Firefox') + ' ' + b[2] : '未知瀏覽器';
+  return ['裝置：' + os, model, browser].filter(Boolean).join('｜');
+}
+async function showDeviceInfo() { $('startInfo').textContent = await deviceInfo(); }
+
+function startErrorText(e) {
+  const name = (e && e.name) || 'Error';
+  const app = inAppBrowser();
+  let text;
+  if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
+    text = app ? `${app} 內建瀏覽器不允許使用麥克風。${openInBrowserHint()}`
+      : '麥克風權限被拒絕。請到瀏覽器的網站設定允許麥克風，重新整理後再按一次。';
+  } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    text = '這台裝置找不到麥克風。';
+  } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+    text = '麥克風被其他 App 佔用（例如通話或錄音），請先關閉後再按一次。';
+  } else if (name === 'AudioTimeout') {
+    text = '聲音功能啟動逾時。請關掉這個頁面重新打開，或換一個瀏覽器。';
+  } else {
+    text = '無法啟動小柯。' + (e && e.message ? e.message : '');
+  }
+  return `${text}（代碼：${name}）`;
+}
+
+function closeAudio() {
+  try { micStream?.getTracks().forEach((t) => t.stop()); } catch { /* 已停止 */ }
+  try { ctx?.close(); } catch { /* 已關閉 */ }
+  micStream = null;
+  ctx = null;
+}
+
 $('btnStart').addEventListener('click', async () => {
-  if (!settings.key) { openSettings(); return; }
+  const msg = $('startMsg'), btn = $('btnStart');
+  if (!settings.key) {
+    msg.textContent = '這支手機還沒有設定 OpenAI 金鑰，請先設定。';
+    showDeviceInfo();
+    $('settingsMsg').textContent = '這支手機還沒有設定金鑰。金鑰存在各手機自己的瀏覽器，每支手機都要設定一次。';
+    openSettings();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    const app = inAppBrowser();
+    msg.textContent = (app ? `${app} 內建瀏覽器不支援麥克風。${openInBrowserHint()}`
+      : `這個瀏覽器不支援麥克風。${openInBrowserHint()}`) + '（代碼：NoMediaDevices）';
+    showDeviceInfo();
+    return;
+  }
+  if (navigator.onLine === false) {
+    msg.textContent = '目前沒有網路，小柯需要連線才能聊天。請檢查 Wi-Fi 或行動數據。（代碼：Offline）';
+    showDeviceInfo();
+    return;
+  }
+  msg.textContent = '啟動中…如果跳出權限詢問，請按「允許」使用麥克風。';
+  btn.disabled = true;
+  const waiting = setTimeout(() => {   // 等權限等太久：可能詢問視窗被擋住，不要讓人以為當機
+    msg.textContent = '還在等麥克風權限。如果沒看到詢問視窗，請到瀏覽器的網站設定允許麥克風，然後重新整理。（代碼：MicWaiting）';
+    showDeviceInfo();
+  }, 10000);
   try {
     await initAudio();
+    watchMic();
+    msg.textContent = '';
+    $('startInfo').textContent = '';
     $('startOverlay').classList.add('hidden');
     requestWakeLock();
   } catch (e) {
-    $('startMsg').textContent = '無法使用麥克風：' + e.message + '（請允許麥克風權限後重新整理）';
+    closeAudio();
+    msg.textContent = startErrorText(e);
+    showDeviceInfo();
+  } finally {
+    clearTimeout(waiting);
+    btn.disabled = false;
   }
 });
+
+// 進入後收不到麥克風資料（常見於瀏覽器把音訊暫停）：畫面會看起來沒反應，要提示
+function watchMic() {
+  lastFrameAt = Date.now();
+  setInterval(() => {
+    if (document.visibilityState !== 'visible' || !ctx) return;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    if (Date.now() - lastFrameAt > 5000 && !face.subtitle)
+      face.subtitle = '收不到麥克風的聲音，請點一下螢幕；還是不行就重新整理。也可以按鍵盤圖示打字。（代碼：MicSilent）';
+  }, 3000);
+}
+
+// 其他沒料到的錯誤也要顯示，不要讓畫面停住像當機
+function showUnexpected(text) {
+  if (!$('startOverlay').classList.contains('hidden')) {
+    $('startMsg').textContent = '發生錯誤：' + text;
+    showDeviceInfo();
+  } else {
+    face.state = 'error';
+    face.subtitle = '發生錯誤：' + text;
+  }
+}
+addEventListener('error', (e) => { if (e.message) showUnexpected(e.message); });
+addEventListener('unhandledrejection', (e) => showUnexpected((e.reason && e.reason.message) || String(e.reason)));
 
 $('btnType').addEventListener('click', () => {
   const bar = $('typebar');
@@ -574,7 +708,10 @@ function openSettings() {
   $('settingsOverlay').classList.remove('hidden');
 }
 $('btnSettings').addEventListener('click', openSettings);
-$('btnCancel').addEventListener('click', () => $('settingsOverlay').classList.add('hidden'));
+$('btnCancel').addEventListener('click', () => {
+  $('settingsMsg').textContent = '';
+  $('settingsOverlay').classList.add('hidden');
+});
 $('btnClear').addEventListener('click', () => {
   history = [];
   face.user = '';
@@ -582,11 +719,18 @@ $('btnClear').addEventListener('click', () => {
 });
 $('settingsForm').addEventListener('submit', (e) => {
   e.preventDefault();
-  store.set('key', $('apiKey').value.trim());
+  const key = $('apiKey').value.trim();
+  store.set('key', key);
+  if (settings.key !== key) {      // 隱私模式或瀏覽器封鎖儲存時會存不進去
+    $('settingsMsg').textContent = '金鑰存不進去：這個瀏覽器不允許儲存資料。請關閉隱私（無痕）模式，或換一個瀏覽器。（代碼：StorageBlocked）';
+    return;
+  }
+  $('settingsMsg').textContent = '';
   store.set('voice', $('voice').value);
   store.set('city', $('city').value.trim() || '台北');
   store.set('vad', $('vadOn').checked ? '1' : '0');
   $('settingsOverlay').classList.add('hidden');
+  if (!$('startOverlay').classList.contains('hidden')) $('startMsg').textContent = '金鑰已儲存，請按「點一下開始」。';
 });
 
 // 螢幕常亮
@@ -599,3 +743,4 @@ document.addEventListener('visibilitychange', () => {
 });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+window.xiaokeReady = true;
